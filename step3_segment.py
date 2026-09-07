@@ -37,11 +37,10 @@ Step 3 — แยกดอกทานตะวันออกจากพื้
     พิกเซลสีเทา ดำ ขาว ไม่มีสี จึงไม่มีมุมสีที่มีความหมาย ค่าที่ได้เลยกระโดดมั่ว
     ในขณะที่พื้นหลังของ dataset นี้มีทั้งดำ เทา และขาว
 
-ไฟล์นี้มี 4 def แต่ละอันทำงานอย่างเดียว เรียงตามลำดับที่ถูกเรียกใช้จริง
+ไฟล์นี้มี 3 def แต่ละอันทำงานอย่างเดียว เรียงตามลำดับที่ถูกเรียกใช้จริง
     1. make_yellow_score()  ภาพสี -> ภาพเทาบอกความเหลือง
     2. make_mask()          ภาพความเหลือง + ค่าตัด -> ภาพขาวดำ
-    3. save_mask()          เซฟภาพขาวดำลงไฟล์
-    4. main()               วนทำทั้ง 50 ภาพ
+    3. main()               วนทำทั้ง 50 ภาพ
 
     step6_roc_curve.py จะเรียก make_yellow_score() กับ make_mask() จากไฟล์นี้ไปใช้ต่อ
     เพื่อกวาดค่าตัดหลายค่า จะได้มั่นใจว่า ROC ใช้โค้ดชุดเดียวกับที่รันจริงเป๊ะๆ
@@ -55,11 +54,6 @@ import sys
 
 import cv2
 import numpy as np
-
-
-# บังคับให้ข้อความที่ print ออกไป ใช้ตารางตัวอักษร utf-8 เสมอ
-# (เหตุผลเต็มๆ อธิบายไว้ใน step1_download_images.py)
-sys.stdout.reconfigure(encoding="utf-8")
 
 
 # โฟลเดอร์ที่ไฟล์ .py นี้วางอยู่
@@ -130,26 +124,7 @@ def make_mask(yellow_score, threshold):
 
 
 # ====================================================================
-#  3. save_mask() — เซฟภาพขาวดำลงไฟล์
-# ====================================================================
-
-def save_mask(mask, file_name):
-    """
-    เซฟ mask เป็นไฟล์ png ในโฟลเดอร์ mask_threshold ใช้ชื่อเดียวกับภาพต้นฉบับ
-
-    รับ     : mask ภาพขาวดำ, file_name ชื่อไฟล์ภาพต้นฉบับ เช่น 204p_0001.jpg
-    ส่งกลับ : ไม่ส่งอะไรกลับ
-    """
-
-    # เซฟเป็น png ไม่ใช่ jpg เพราะ jpg บีบอัดแบบมีการสูญเสีย
-    # ค่า 255 ที่เซฟลงไป ตอนอ่านกลับมาอาจกลายเป็น 251 หรือ 254
-    # ทำให้การนับ TP FP ใน step5 เพี้ยน ส่วน png เก็บค่าเดิมเป๊ะ
-    mask_name = file_name.replace(".jpg", ".png")
-    cv2.imwrite(os.path.join(MASK_FOLDER, mask_name), mask)
-
-
-# ====================================================================
-#  4. main() — วนทำทั้ง 50 ภาพ
+#  3. main() — วนทำทั้ง 50 ภาพ
 # ====================================================================
 
 def main():
@@ -160,9 +135,24 @@ def main():
     ส่งกลับ : ไม่ส่งอะไรกลับ
     """
 
+    # บังคับให้ข้อความที่ print ออกไป ใช้ตารางตัวอักษร utf-8 เสมอ
+    # (เหตุผลเต็มๆ อธิบายไว้ใน step1_download_images.py)
+    sys.stdout.reconfigure(encoding="utf-8")
+
     os.makedirs(MASK_FOLDER, exist_ok=True)
 
-    image_files = sorted(os.listdir(IMAGE_FOLDER))
+    # เก็บเฉพาะไฟล์ .jpg ไม่เอาไฟล์อื่นที่อาจปนอยู่ในโฟลเดอร์
+    #
+    # ทำไมต้องกรอง ไฟล์อื่นมาจากไหน
+    #     1. ไฟล์ .part ที่ค้างไว้ตอนเน็ตหลุดกลางการโหลด (ดู step1_download_images.py)
+    #     2. ไฟล์ .DS_Store ที่ macOS สร้างเองทุกครั้งที่เปิดโฟลเดอร์ดูใน Finder
+    #        เครื่อง Mac ในกลุ่มจะเจอข้อนี้แน่นอน
+    #     ถ้าไม่กรอง cv2.imread จะคืน None แล้วบรรทัดถัดไปพังทันที
+    #     ทดสอบแล้ว step3 พังด้วย cv2.error ส่วน step2 พังด้วย AttributeError
+    image_files = []
+    for file_name in sorted(os.listdir(IMAGE_FOLDER)):
+        if file_name.endswith(".jpg"):
+            image_files.append(file_name)
 
     print("แยกดอกทานตะวันด้วยการตัดค่าสี  ค่าตัด = " + str(YELLOW_THRESHOLD))
     print("")
@@ -173,7 +163,11 @@ def main():
         yellow_score = make_yellow_score(image)
         mask = make_mask(yellow_score, YELLOW_THRESHOLD)
 
-        save_mask(mask, file_name)
+        # เซฟเป็น png ไม่ใช่ jpg เพราะ jpg บีบอัดแบบมีการสูญเสีย
+        # ค่า 255 ที่เซฟลงไป ตอนอ่านกลับมาอาจกลายเป็น 251 หรือ 254
+        # ทำให้การนับ TP FP ใน step5 เพี้ยน ส่วน png เก็บค่าเดิมเป๊ะ
+        mask_name = file_name.replace(".jpg", ".png")
+        cv2.imwrite(os.path.join(MASK_FOLDER, mask_name), mask)
 
         # บอกว่าภาพนี้ถูกตัดสินว่าเป็นดอกไม้กี่เปอร์เซ็นต์ของภาพ
         # ถ้าเห็นเลข 0 หรือ 100 แปลว่าค่าตัดไม่เหมาะกับภาพนั้น ต้องกลับมาดู
@@ -181,7 +175,13 @@ def main():
         print(file_name + "   เป็นดอกไม้ " + str(round(white_percent, 1)) + "%")
 
     print("")
-    print("เสร็จแล้ว เขียน mask ไป " + str(len(os.listdir(MASK_FOLDER))) + " ไฟล์")
+    # นับเฉพาะ .png ด้วยเหตุผลเดียวกับตอนกรองภาพข้างบน
+    written_count = 0
+    for file_name in os.listdir(MASK_FOLDER):
+        if file_name.endswith(".png"):
+            written_count = written_count + 1
+
+    print("เสร็จแล้ว เขียน mask ไป " + str(written_count) + " ไฟล์")
     print("เปิดโฟลเดอร์ dataset/mask_threshold ดูผลได้เลย")
 
 
