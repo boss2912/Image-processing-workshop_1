@@ -30,13 +30,12 @@ Ground truth คืออะไร
     ภาพไหนที่เซฟแล้ว โปรแกรมจะข้ามให้อัตโนมัติในการรันครั้งถัดไป
     ถ้าอยากระบายภาพไหนใหม่ ให้ลบไฟล์ของภาพนั้นใน dataset/ground_truth/ ทิ้งก่อน
 
-ไฟล์นี้มี 6 def แต่ละอันทำงานอย่างเดียว เรียงตามลำดับที่ถูกเรียกใช้จริง
+ไฟล์นี้มี 5 def แต่ละอันทำงานอย่างเดียว เรียงตามลำดับที่ถูกเรียกใช้จริง
     1. draw_brush()        ระบายวงกลม 1 จุดลงบน mask
     2. handle_mouse()      แปลการกดเมาส์ ว่าจะให้ draw_brush ระบายหรือลบ
     3. make_display()      เอาภาพต้นฉบับกับ mask มาซ้อนกันให้เห็นบนจอ
-    4. save_mask()         เซฟ mask ลงไฟล์
-    5. label_one_image()   คุมการระบาย 1 ภาพ จนกว่าจะกด s หรือ n
-    6. main()              ไล่เปิดทีละภาพจนครบ 50
+    4. label_one_image()   คุมการระบาย 1 ภาพ จนกว่าจะกด s หรือ n
+    5. main()              ไล่เปิดทีละภาพจนครบ 50
 
 รัน:  python step2_make_ground_truth.py
       (ต้องรัน step1 ให้เสร็จก่อน ไม่งั้นจะไม่มีภาพให้ระบาย)
@@ -47,11 +46,6 @@ import sys
 
 import cv2
 import numpy as np
-
-
-# บังคับให้ข้อความที่ print ออกไป ใช้ตารางตัวอักษร utf-8 เสมอ
-# (เหตุผลเต็มๆ อธิบายไว้ใน step1_download_images.py)
-sys.stdout.reconfigure(encoding="utf-8")
 
 
 # โฟลเดอร์ที่ไฟล์ .py นี้วางอยู่
@@ -96,7 +90,7 @@ BIGGEST_BRUSH = 60
 START_FROM_IMAGE = 1
 
 
-# ตัวแปรส่วนกลาง 5 ตัว
+# ตัวแปรส่วนกลาง 3 ตัว
 #
 # ทำไมต้องใช้ตัวแปรส่วนกลาง
 #     OpenCV บังคับว่า function ที่รับเหตุการณ์เมาส์ ต้องมีหน้าตาแบบนี้เป๊ะๆ
@@ -106,8 +100,6 @@ START_FROM_IMAGE = 1
 current_mask = None      # mask ของภาพที่กำลังระบายอยู่ตอนนี้
 current_scale = 1.0      # ภาพบนจอ ถูกขยายจากขนาดจริงกี่เท่า
 brush_size = START_BRUSH_SIZE
-is_painting = False      # ตอนนี้กดเมาส์ซ้ายค้างอยู่ไหม
-is_erasing = False       # ตอนนี้กดเมาส์ขวาค้างอยู่ไหม
 
 
 # ====================================================================
@@ -141,35 +133,38 @@ def handle_mouse(event, x, y, flags, param):
     ถูกเรียกโดย OpenCV ทุกครั้งที่เมาส์ขยับหรือถูกกด บนหน้าต่างของเรา
 
     รับ     : event เหตุการณ์ที่เกิด, x y ตำแหน่งเมาส์
-              flags กับ param ไม่ได้ใช้ แต่ต้องมีไว้ให้ครบตามที่ OpenCV กำหนด
+              flags บอกว่า "ตอนนี้" ปุ่มไหนถูกกดค้างอยู่
+              param ไม่ได้ใช้ แต่ต้องมีไว้ให้ครบตามที่ OpenCV กำหนด
     ส่งกลับ : ไม่ส่งอะไรกลับ
     """
 
-    global is_painting, is_erasing
-
-    # กดปุ่มซ้ายลง = เริ่มระบาย และระบายจุดแรกทันที
+    # กดปุ่มลง = ระบายจุดแรกทันที
     if event == cv2.EVENT_LBUTTONDOWN:
-        is_painting = True
         draw_brush(x, y, PAINT_COLOR)
 
-    # ปล่อยปุ่มซ้าย = หยุดระบาย
-    elif event == cv2.EVENT_LBUTTONUP:
-        is_painting = False
-
-    # กดปุ่มขวาลง = เริ่มลบ
     elif event == cv2.EVENT_RBUTTONDOWN:
-        is_erasing = True
         draw_brush(x, y, ERASE_COLOR)
-
-    elif event == cv2.EVENT_RBUTTONUP:
-        is_erasing = False
 
     # เมาส์ขยับ ต้องเช็คก่อนว่ากำลังกดปุ่มค้างอยู่ไหม
     # ถ้าไม่เช็ค แค่เลื่อนเมาส์ผ่านเฉยๆ ก็จะระบายไปด้วย
+    #
+    # flags & cv2.EVENT_FLAG_LBUTTON อ่านว่าอะไร
+    #     flags เป็นเลขก้อนเดียวที่ OpenCV ยัดสถานะหลายอย่างรวมกันมา
+    #     ทั้งปุ่มซ้าย ปุ่มขวา ปุ่ม Ctrl ปุ่ม Shift
+    #     เครื่องหมาย & คือการถามว่า "สถานะที่เราสนใจ อยู่ในก้อนนั้นไหม"
+    #     ใช้ == เทียบตรงๆ ไม่ได้ เพราะถ้าผู้ใช้กด Ctrl ค้างไปด้วย ตัวเลขจะไม่เท่ากันแล้ว
+    #
+    # ทำไมไม่ใช้ตัวแปรจำสถานะเอาไว้เอง (เดิมเขียนแบบนั้น แล้วมีบั๊ก)
+    #     เดิมจำไว้ในตัวแปร is_painting แล้วล้างค่าตอนได้รับ event ปล่อยปุ่ม
+    #     แต่ถ้าผู้ใช้ลากเมาส์ออกไปนอกหน้าต่างแล้วปล่อยปุ่มตรงนั้น
+    #     event ปล่อยปุ่มจะไม่ถูกส่งมาที่หน้าต่างเรา ตัวแปรเลยค้างเป็น True ตลอด
+    #     พอเลื่อนเมาส์กลับเข้ามา มันระบายต่อทั้งที่ไม่ได้กดอะไร -> เฉลยเปื้อน
+    #     ทดสอบแล้วเกิดจริง ระบายเพิ่มไป 81 พิกเซลโดยไม่ได้กดปุ่ม
+    #     ส่วน flags เป็นค่าที่ OpenCV บอกสถานะจริงมาให้ทุกครั้ง ไม่มีอะไรให้ค้าง
     elif event == cv2.EVENT_MOUSEMOVE:
-        if is_painting:
+        if flags & cv2.EVENT_FLAG_LBUTTON:
             draw_brush(x, y, PAINT_COLOR)
-        elif is_erasing:
+        elif flags & cv2.EVENT_FLAG_RBUTTON:
             draw_brush(x, y, ERASE_COLOR)
 
 
@@ -190,7 +185,16 @@ def make_display(image, mask, file_name, image_number, total_images):
     display_height = int(image.shape[0] * current_scale)
 
     big_image = cv2.resize(image, (display_width, display_height))
-    big_mask = cv2.resize(mask, (display_width, display_height))
+
+    # ขยาย mask ต้องสั่ง INTER_NEAREST เสมอ แปลว่า "ขยายแบบก๊อปค่าเดิม ห้ามเกลี่ยสี"
+    #
+    # ถ้าไม่สั่ง OpenCV จะเกลี่ยค่าให้อัตโนมัติ แล้วขอบ mask จะมีค่ากลางๆ โผล่มา
+    # เช่น 4, 12, 20, 28 ทั้งที่ mask จริงมีแค่ 0 กับ 255
+    # บรรทัดล่างเลือกด้วย big_mask > 0 มันเลยกินค่ากลางๆ พวกนั้นเข้ามาด้วย
+    # ทดลองแล้ว สีเขียวบนจอกว้างกว่าที่ระบายจริง 10.2%
+    # ทำให้คนระบายเห็นเขียวล้ำออกไป เลยหยุดมือเร็วเกิน แล้วได้ mask เล็กกว่าดอกจริงทุกภาพ
+    big_mask = cv2.resize(mask, (display_width, display_height),
+                          interpolation=cv2.INTER_NEAREST)
 
     # ทำภาพสีเขียวล้วนขนาดเท่ากัน แล้วผสมกับภาพจริงครึ่งต่อครึ่ง
     # ที่ต้องโปร่งแสง เพราะถ้าทับทึบจะมองไม่เห็นกลีบดอกข้างใต้ แล้วระบายไม่ตรงขอบ
@@ -218,27 +222,7 @@ def make_display(image, mask, file_name, image_number, total_images):
 
 
 # ====================================================================
-#  4. save_mask() — เซฟ mask ลงไฟล์
-# ====================================================================
-
-def save_mask(mask, file_name):
-    """
-    เซฟ mask เป็นไฟล์ png ในโฟลเดอร์ ground_truth ใช้ชื่อเดียวกับภาพต้นฉบับ
-
-    รับ     : mask ที่ระบายเสร็จแล้ว, file_name ชื่อไฟล์ภาพต้นฉบับ เช่น 204p_0001.jpg
-    ส่งกลับ : ไม่ส่งอะไรกลับ
-    """
-
-    # เปลี่ยนนามสกุลจาก .jpg เป็น .png
-    # เซฟเป็น png เพราะ jpg เป็นการบีบอัดแบบมีการสูญเสีย
-    # ค่า 255 ที่เซฟลงไป ตอนอ่านกลับมาอาจกลายเป็น 251 หรือ 254 ได้
-    # ซึ่งทำให้การนับ TP FP ใน step5 เพี้ยน  ส่วน png เก็บค่าเดิมเป๊ะ
-    mask_name = file_name.replace(".jpg", ".png")
-    cv2.imwrite(os.path.join(GROUND_TRUTH_FOLDER, mask_name), mask)
-
-
-# ====================================================================
-#  5. label_one_image() — คุมการระบาย 1 ภาพ จนกว่าจะกด s หรือ n
+#  4. label_one_image() — คุมการระบาย 1 ภาพ จนกว่าจะกด s หรือ n
 # ====================================================================
 
 def label_one_image(file_name, image_number, total_images):
@@ -277,7 +261,11 @@ def label_one_image(file_name, image_number, total_images):
         key = cv2.waitKey(20) & 0xFF
 
         if key == ord("s"):
-            save_mask(current_mask, file_name)
+            # เซฟเป็น png ไม่ใช่ jpg เพราะ jpg บีบอัดแบบมีการสูญเสีย
+            # ค่า 255 ที่เซฟลงไป ตอนอ่านกลับมาอาจกลายเป็น 251 หรือ 254 ได้
+            # ทำให้การนับ TP FP ใน step5 เพี้ยน ส่วน png เก็บค่าเดิมเป๊ะ
+            mask_name = file_name.replace(".jpg", ".png")
+            cv2.imwrite(os.path.join(GROUND_TRUTH_FOLDER, mask_name), current_mask)
             return "saved"
 
         if key == ord("n"):
@@ -297,7 +285,7 @@ def label_one_image(file_name, image_number, total_images):
 
 
 # ====================================================================
-#  6. main() — ไล่เปิดทีละภาพจนครบ
+#  5. main() — ไล่เปิดทีละภาพจนครบ
 # ====================================================================
 
 def main():
@@ -308,9 +296,25 @@ def main():
     ส่งกลับ : ไม่ส่งอะไรกลับ
     """
 
+    # บังคับให้ข้อความที่ print ออกไป ใช้ตารางตัวอักษร utf-8 เสมอ
+    # (เหตุผลเต็มๆ อธิบายไว้ใน step1_download_images.py)
+    sys.stdout.reconfigure(encoding="utf-8")
+
     os.makedirs(GROUND_TRUTH_FOLDER, exist_ok=True)
 
-    image_files = sorted(os.listdir(IMAGE_FOLDER))
+    # เก็บเฉพาะไฟล์ .jpg ไม่เอาไฟล์อื่นที่อาจปนอยู่ในโฟลเดอร์
+    #
+    # ทำไมต้องกรอง ไฟล์อื่นมาจากไหน
+    #     1. ไฟล์ .part ที่ค้างไว้ตอนเน็ตหลุดกลางการโหลด (ดู step1_download_images.py)
+    #     2. ไฟล์ .DS_Store ที่ macOS สร้างเองทุกครั้งที่เปิดโฟลเดอร์ดูใน Finder
+    #        เครื่อง Mac ในกลุ่มจะเจอข้อนี้แน่นอน
+    #     ถ้าไม่กรอง cv2.imread จะคืน None แล้วบรรทัดถัดไปพังทันที
+    #     ทดสอบแล้ว step3 พังด้วย cv2.error ส่วน step2 พังด้วย AttributeError
+    image_files = []
+    for file_name in sorted(os.listdir(IMAGE_FOLDER)):
+        if file_name.endswith(".jpg"):
+            image_files.append(file_name)
+
     total_images = len(image_files)
 
     print("วิธีใช้")
@@ -354,7 +358,13 @@ def main():
     cv2.destroyAllWindows()
 
     # นับไฟล์จริงในโฟลเดอร์ เพื่อยืนยันว่าเหลืออีกกี่ภาพ
-    done = len(os.listdir(GROUND_TRUTH_FOLDER))
+    # ต้องนับเฉพาะ .png ด้วยเหตุผลเดียวกับตอนกรองภาพข้างบน
+    # ถ้านับทุกไฟล์ พอมี .DS_Store ปนมา จะกลายเป็นบอกว่าครบ 50 ทั้งที่ระบายไปแค่ 49
+    # แล้วคนระบายจะหยุดเพราะเชื่อว่าเสร็จแล้ว
+    done = 0
+    for file_name in os.listdir(GROUND_TRUTH_FOLDER):
+        if file_name.endswith(".png"):
+            done = done + 1
     print("")
     print("ตอนนี้มี ground truth แล้ว " + str(done) + " ภาพ จากทั้งหมด " + str(total_images) + " ภาพ")
 
