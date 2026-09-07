@@ -43,13 +43,12 @@ Step 4 — ปรับปรุงผลลัพธ์ด้วย Morphology
     และถ้าวงกลีบยังขาดอยู่ รูตรงกลางจะทะลุออกนอก ไม่นับเป็นรู อุดไม่ได้
     จึงต้อง Closing ปิดวงให้ครบก่อน แล้วค่อยอุด
 
-ไฟล์นี้มี 6 def แต่ละอันทำงานอย่างเดียว เรียงตามลำดับที่ถูกเรียกใช้จริง
-    1. make_structuring_element()  สร้าง SE ที่ Opening กับ Closing ใช้
-    2. remove_small_spots()        Opening   ลบจุดเล็กในพื้นหลัง
-    3. close_small_gaps()          Closing   เชื่อมรอยขาดของวงกลีบ
-    4. fill_holes()                Region Filling  อุดรูเกสร
-    5. clean_mask()                เรียก 3 อันบนตามลำดับ
-    6. main()                      วนทำทั้ง 50 ภาพ
+ไฟล์นี้มี 5 def แต่ละอันทำงานอย่างเดียว เรียงตามลำดับที่ถูกเรียกใช้จริง
+    1. remove_small_spots()  Opening   ลบจุดเล็กในพื้นหลัง
+    2. close_small_gaps()    Closing   เชื่อมรอยขาดของวงกลีบ
+    3. fill_holes()          Region Filling  อุดรูเกสร
+    4. clean_mask()          เรียก 3 อันบนตามลำดับ
+    5. main()                วนทำทั้ง 50 ภาพ
 
     step6_roc_curve.py จะเรียก clean_mask() จากไฟล์นี้ไปใช้ต่อ
     เพื่อให้ ROC เส้น "หลัง morphology" ใช้โค้ดชุดเดียวกับที่รันจริงเป๊ะๆ
@@ -65,11 +64,6 @@ import cv2
 import numpy as np
 
 
-# บังคับให้ข้อความที่ print ออกไป ใช้ตารางตัวอักษร utf-8 เสมอ
-# (เหตุผลเต็มๆ อธิบายไว้ใน step1_download_images.py)
-sys.stdout.reconfigure(encoding="utf-8")
-
-
 # โฟลเดอร์ที่ไฟล์ .py นี้วางอยู่
 # (เหตุผลเต็มๆ ว่าทำไมไม่เขียน path ตรงๆ อธิบายไว้ใน step1_download_images.py)
 PROJECT_FOLDER = os.path.dirname(os.path.abspath(__file__))
@@ -77,7 +71,13 @@ PROJECT_FOLDER = os.path.dirname(os.path.abspath(__file__))
 THRESHOLD_MASK_FOLDER = os.path.join(PROJECT_FOLDER, "dataset", "mask_threshold")
 MORPHOLOGY_MASK_FOLDER = os.path.join(PROJECT_FOLDER, "dataset", "mask_morphology")
 
-# ขนาดของ Structuring Element
+# ขนาดของ Structuring Element (SE)
+#
+# ทำไมใช้ SE รูปวงรี ไม่ใช่สี่เหลี่ยม
+#     สไลด์หน้า 13 บอกว่ารูปร่างของ SE เป็นตัวกำหนดว่าวัตถุจะโตหรือหดไปทางไหน
+#     ดอกทานตะวันกลม ถ้าใช้ SE สี่เหลี่ยม ขอบที่ได้จะเป็นเหลี่ยมตามไปด้วย
+#     วงรีให้ขอบที่โค้งตามรูปดอกมากกว่า
+#     (โค้ดตัวอย่างที่ครูให้ในสไลด์หน้า 21 ก็ใช้ cv.MORPH_ELLIPSE เหมือนกัน)
 #
 # ทำไมต้องแยกขนาดของ Opening กับ Closing
 #     Opening ลบก้อนที่เล็กกว่า SE ถ้าใช้ SE ใหญ่ไป จะไปลบปลายกลีบดอกที่เรียวๆ ทิ้งด้วย
@@ -88,28 +88,7 @@ CLOSING_SIZE = 11
 
 
 # ====================================================================
-#  1. make_structuring_element() — สร้าง SE
-# ====================================================================
-
-def make_structuring_element(size):
-    """
-    สร้าง Structuring Element รูปวงรี ตามขนาดที่บอก
-
-    รับ     : size ความกว้างและความสูงของ SE เป็นพิกเซล
-    ส่งกลับ : SE ที่เอาไปใส่ให้ cv2.morphologyEx ใช้ได้
-
-    ทำไมเลือกวงรี ไม่เลือกสี่เหลี่ยม
-        สไลด์หน้า 13 บอกว่ารูปร่างของ SE เป็นตัวกำหนดว่าวัตถุจะโตหรือหดไปทางไหน
-        ดอกทานตะวันกลม ถ้าใช้ SE สี่เหลี่ยม ขอบที่ได้จะเป็นเหลี่ยมตามไปด้วย
-        วงรีให้ขอบที่โค้งตามรูปดอกมากกว่า
-        (โค้ดตัวอย่างที่ครูให้ในสไลด์หน้า 21 ก็ใช้ cv.MORPH_ELLIPSE เหมือนกัน)
-    """
-
-    return cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (size, size))
-
-
-# ====================================================================
-#  2. remove_small_spots() — Opening ลบจุดเล็กในพื้นหลัง
+#  1. remove_small_spots() — Opening ลบจุดเล็กในพื้นหลัง
 # ====================================================================
 
 def remove_small_spots(mask):
@@ -125,12 +104,12 @@ def remove_small_spots(mask):
         ผลคือ ก้อนเล็กหาย ก้อนใหญ่อยู่ครบ
     """
 
-    structuring_element = make_structuring_element(OPENING_SIZE)
+    structuring_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (OPENING_SIZE, OPENING_SIZE))
     return cv2.morphologyEx(mask, cv2.MORPH_OPEN, structuring_element)
 
 
 # ====================================================================
-#  3. close_small_gaps() — Closing เชื่อมรอยขาดของวงกลีบ
+#  2. close_small_gaps() — Closing เชื่อมรอยขาดของวงกลีบ
 # ====================================================================
 
 def close_small_gaps(mask):
@@ -149,12 +128,12 @@ def close_small_gaps(mask):
         ถ้าวงกลีบยังขาด รูตรงกลางจะทะลุออกนอกภาพ ไม่ถือว่าเป็นรู อุดไม่ได้
     """
 
-    structuring_element = make_structuring_element(CLOSING_SIZE)
+    structuring_element = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (CLOSING_SIZE, CLOSING_SIZE))
     return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, structuring_element)
 
 
 # ====================================================================
-#  4. fill_holes() — Region Filling อุดรูเกสรกลางดอก
+#  3. fill_holes() — Region Filling อุดรูเกสรกลางดอก
 # ====================================================================
 
 def fill_holes(mask):
@@ -202,7 +181,7 @@ def fill_holes(mask):
 
 
 # ====================================================================
-#  5. clean_mask() — เรียก 3 ขั้นตอนบนตามลำดับ
+#  4. clean_mask() — เรียก 3 ขั้นตอนบนตามลำดับ
 # ====================================================================
 
 def clean_mask(mask):
@@ -221,7 +200,7 @@ def clean_mask(mask):
 
 
 # ====================================================================
-#  6. main() — วนทำทั้ง 50 ภาพ
+#  5. main() — วนทำทั้ง 50 ภาพ
 # ====================================================================
 
 def main():
@@ -232,9 +211,24 @@ def main():
     ส่งกลับ : ไม่ส่งอะไรกลับ
     """
 
+    # บังคับให้ข้อความที่ print ออกไป ใช้ตารางตัวอักษร utf-8 เสมอ
+    # (เหตุผลเต็มๆ อธิบายไว้ใน step1_download_images.py)
+    sys.stdout.reconfigure(encoding="utf-8")
+
     os.makedirs(MORPHOLOGY_MASK_FOLDER, exist_ok=True)
 
-    mask_files = sorted(os.listdir(THRESHOLD_MASK_FOLDER))
+    # เก็บเฉพาะไฟล์ .png ไม่เอาไฟล์อื่นที่อาจปนอยู่ในโฟลเดอร์
+    #
+    # ทำไมต้องกรอง ไฟล์อื่นมาจากไหน
+    #     1. ไฟล์ .part ที่ค้างไว้ตอนเน็ตหลุดกลางการโหลด (ดู step1_download_images.py)
+    #     2. ไฟล์ .DS_Store ที่ macOS สร้างเองทุกครั้งที่เปิดโฟลเดอร์ดูใน Finder
+    #        เครื่อง Mac ในกลุ่มจะเจอข้อนี้แน่นอน
+    #     ถ้าไม่กรอง cv2.imread จะคืน None แล้วบรรทัดถัดไปพังทันที
+    #     ทดสอบแล้ว step3 พังด้วย cv2.error ส่วน step2 พังด้วย AttributeError
+    mask_files = []
+    for file_name in sorted(os.listdir(THRESHOLD_MASK_FOLDER)):
+        if file_name.endswith(".png"):
+            mask_files.append(file_name)
 
     print("ปรับปรุง mask ด้วย Morphology")
     print("    Opening  SE วงรีขนาด " + str(OPENING_SIZE))
@@ -258,7 +252,13 @@ def main():
               + "   (เปลี่ยน " + str(change) + " พิกเซล)")
 
     print("")
-    print("เสร็จแล้ว เขียน mask ไป " + str(len(os.listdir(MORPHOLOGY_MASK_FOLDER))) + " ไฟล์")
+    # นับเฉพาะ .png ด้วยเหตุผลเดียวกับตอนกรอง mask ข้างบน
+    written_count = 0
+    for file_name in os.listdir(MORPHOLOGY_MASK_FOLDER):
+        if file_name.endswith(".png"):
+            written_count = written_count + 1
+
+    print("เสร็จแล้ว เขียน mask ไป " + str(written_count) + " ไฟล์")
     print("เปิดโฟลเดอร์ dataset/mask_morphology เทียบกับ dataset/mask_threshold ดูได้เลย")
 
 
